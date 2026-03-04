@@ -1,0 +1,141 @@
+plugins {
+    id 'com.android.application'
+}
+def getGitCommitCount() {
+    def count = 0
+    try {
+        def output = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+        }
+        count = output.toString().trim().toInteger()
+    } catch (Exception e) {
+        println "Warning: Could not get git commit count: ${e.message}"
+        count = 43
+    }
+    return count
+}
+def getGitShortHash() {
+    def hash = 'unknown'
+    try {
+        def output = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+        }
+        hash = output.toString().trim()
+    } catch (Exception e) {
+        println "Warning: Could not get git hash: ${e.message}"
+    }
+    return hash
+}
+def getVersionNameWithHash() {
+    def baseVersion = "2.2.3"
+    def gitHash = getGitShortHash()
+    return "${baseVersion}-${gitHash}"
+}
+android {
+    compileSdk 36
+    defaultConfig {
+        applicationId "com.github.xfalcon.vhosts"
+        minSdkVersion 19
+        targetSdkVersion 36
+        versionCode getGitCommitCount()
+        versionName getVersionNameWithHash()
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        android.applicationVariants.all { variant ->
+            variant.outputs.all {
+                def flavorName = variant.flavorName
+                def buildType = variant.buildType.name
+                def versionName = variant.versionName
+                def versionCode = variant.versionCode
+                outputFileName = "VirtualHosts-v${versionName}-${versionCode}-${flavorName}-${buildType}.apk"
+            }
+        }
+    }
+    flavorDimensions "CHANNEL"
+    productFlavors {
+        github {
+            dimension "CHANNEL"
+            buildConfigField("boolean", "IS_GooglePlay", "false")
+        }
+    }
+    signingConfigs {
+        release {
+            def propsFile = file(System.getenv('SIGNING_PROPERTIES') ?: 'signing.properties')
+            if (propsFile.exists()) {
+                println "Loading signing config from: ${propsFile.absolutePath}"
+                def props = new Properties()
+                props.load(new FileInputStream(propsFile))
+                storeFile file(System.getenv('KEYSTORE_FILE') ?: props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            zipAlignEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            buildConfigField("boolean", "IS_GooglePlay", "false")
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    namespace 'com.github.xfalcon.vhosts'
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a'
+            universalApk false
+        }
+    }
+    packagingOptions {
+        pickFirst 'META-INF/*'
+    }
+}
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    // 已移除：Firebase/Billing/Google 相关 SDK
+
+    // AndroidX 核心库
+    implementation 'androidx.core:core:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'androidx.preference:preference:1.2.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+   implementation 'androidx.annotation:annotation:1.7.0'
+
+    // 第三方库
+    implementation 'com.github.zcweng:switch-button:0.0.3@aar'
+    implementation 'com.github.clans:fab:1.6.4'
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+
+    // 测试
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:rules:1.5.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.42'
+    annotationProcessor 'org.projectlombok:lombok:1.18.42'
+}
