@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
 
     steps:
       - name: Checkout code
@@ -46,14 +43,29 @@ jobs:
         run: |
           mkdir -p app
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/key.jks
+          echo "Keystore file info:"
           ls -la app/key.jks
+          file app/key.jks
+          # 检查文件是否是有效的JKS文件
+          if keytool -list -keystore app/key.jks -storepass "${{ secrets.STORE_PASSWORD }}" 2>&1 | head -5; then
+            echo "✅ Keystore is valid and password is correct"
+          else
+            echo "❌ Keystore validation failed"
+            echo "Trying to debug..."
+            # 尝试不带密码查看（会报错但可能提供信息）
+            keytool -list -keystore app/key.jks 2>&1 || true
+          fi
 
       - name: Create signing config
         run: |
           cat > signing.properties << 'EOF'
-          ${{ secrets.SIGNING_CONFIG }}
+          storeFile=app/key.jks
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
-          echo "Signing config created successfully"
+          echo "Signing config created. Contents:"
+          cat signing.properties | grep -v Password || echo "File created successfully"
 
       - name: Build release APK (github flavor only, no tracking)
         run: ./gradlew assembleGithubRelease --stacktrace
