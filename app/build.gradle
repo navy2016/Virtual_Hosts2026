@@ -38,11 +38,14 @@ def getVersionNameWithHash() {
     return "${baseVersion}-${gitHash}"
 }
 
-// 从 local.properties 读取签名配置
-def keystorePropertiesFile = file('local.properties')
+// 从 local.properties 读取签名配置（在项目根目录）
+def keystorePropertiesFile = rootProject.file('local.properties')
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    println "✅ Found local.properties at: ${keystorePropertiesFile.absolutePath}"
+} else {
+    println "❌ local.properties not found at: ${keystorePropertiesFile.absolutePath}"
 }
 
 android {
@@ -75,14 +78,18 @@ android {
     }
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
-                storeFile file(keystoreProperties['storeFile'])
+            def storeFilePath = keystoreProperties['storeFile']
+            if (storeFilePath != null && !storeFilePath.isEmpty()) {
+                // 使用 rootProject.file 确保路径相对于项目根目录
+                storeFile rootProject.file(storeFilePath)
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
-                println "✅ Release signing configured with: ${keystoreProperties['storeFile']}"
+                println "✅ Release signing configured:"
+                println "   Store file: ${storeFilePath}"
+                println "   Key alias: ${keystoreProperties['keyAlias']}"
             } else {
-                println "⚠️ No signing config found, building unsigned"
+                println "⚠️ No signing config found in local.properties"
             }
         }
     }
@@ -92,8 +99,9 @@ android {
             zipAlignEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
+            if (keystoreProperties['storeFile'] != null) {
                 signingConfig signingConfigs.release
+                println "✅ Applied signingConfig to release build"
             }
             buildConfigField("boolean", "IS_GooglePlay", "false")
         }
