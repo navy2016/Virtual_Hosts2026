@@ -39,7 +39,7 @@ def getVersionNameWithHash() {
 }
 
 // 从 local.properties 读取签名配置
-def keystorePropertiesFile = rootProject.file('local.properties')
+def keystorePropertiesFile = file('local.properties')
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
@@ -76,7 +76,7 @@ android {
     signingConfigs {
         release {
             if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
-                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
