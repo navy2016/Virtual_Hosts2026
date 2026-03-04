@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
 
     steps:
       - name: Checkout code
@@ -18,7 +21,6 @@ jobs:
 
       - name: Get Git Info
         id: git_info
-        working-directory: Virtual-Hosts-main
         run: |
           COMMIT_COUNT=$(git rev-list --count HEAD)
           SHORT_HASH=$(git rev-parse --short HEAD)
@@ -35,21 +37,18 @@ jobs:
           java-version: '17'
 
       - name: Make gradlew executable
-        working-directory: Virtual-Hosts-main
         run: chmod +x ./gradlew
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Decode signing key
-        working-directory: Virtual-Hosts-main
         run: |
           mkdir -p app
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/key.jks
           ls -la app/key.jks
 
       - name: Create signing config
-        working-directory: Virtual-Hosts-main
         run: |
           cat > signing.properties << 'EOF'
           ${{ secrets.SIGNING_CONFIG }}
@@ -57,14 +56,12 @@ jobs:
           echo "Signing config created successfully"
 
       - name: Build release APK (github flavor only, no tracking)
-        working-directory: Virtual-Hosts-main
         run: ./gradlew assembleGithubRelease --stacktrace
         env:
-          KEYSTORE_FILE: ${{ github.workspace }}/Virtual-Hosts-main/app/key.jks
-          SIGNING_PROPERTIES: ${{ github.workspace }}/Virtual-Hosts-main/signing.properties
+          KEYSTORE_FILE: ${{ github.workspace }}/app/key.jks
+          SIGNING_PROPERTIES: ${{ github.workspace }}/signing.properties
 
       - name: List output files
-        working-directory: Virtual-Hosts-main
         run: |
           echo "=== Generated APK files ==="
           find app/build/outputs/apk -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
@@ -77,14 +74,14 @@ jobs:
         if: success()
         with:
           name: VirtualHosts-v${{ steps.git_info.outputs.version }}-github-release-arm64-v8a
-          path: Virtual-Hosts-main/app/build/outputs/apk/github/release/*.apk
+          path: app/build/outputs/apk/github/release/*.apk
           if-no-files-found: warn
 
       - name: Upload APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: Virtual-Hosts-main/app/build/outputs/apk/github/release/*.apk
+          files: app/build/outputs/apk/github/release/*.apk
           name: Release ${{ github.ref_name }} (No Tracking)
           body: |
             ## VirtualHosts ${{ github.ref_name }} (隐私友好版)
