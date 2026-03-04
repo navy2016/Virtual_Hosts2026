@@ -37,6 +37,14 @@ def getVersionNameWithHash() {
     def gitHash = getGitShortHash()
     return "${baseVersion}-${gitHash}"
 }
+
+// 从 local.properties 读取签名配置
+def keystorePropertiesFile = file('local.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     compileSdk 36
     defaultConfig {
@@ -67,15 +75,14 @@ android {
     }
     signingConfigs {
         release {
-            def propsFile = file(System.getenv('SIGNING_PROPERTIES') ?: 'signing.properties')
-            if (propsFile.exists()) {
-                println "Loading signing config from: ${propsFile.absolutePath}"
-                def props = new Properties()
-                props.load(new FileInputStream(propsFile))
-                storeFile file(System.getenv('KEYSTORE_FILE') ?: props['storeFile'])
-                storePassword props['storePassword']
-                keyAlias props['keyAlias']
-                keyPassword props['keyPassword']
+            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                println "✅ Release signing configured with: ${keystoreProperties['storeFile']}"
+            } else {
+                println "⚠️ No signing config found, building unsigned"
             }
         }
     }
@@ -85,7 +92,9 @@ android {
             zipAlignEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
+                signingConfig signingConfigs.release
+            }
             buildConfigField("boolean", "IS_GooglePlay", "false")
         }
         debug {
