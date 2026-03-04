@@ -1,0 +1,111 @@
+name: Build APK (No Tracking)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Virtual-Hosts-main
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Git Info
+        id: git_info
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          SHORT_HASH=$(git rev-parse --short HEAD)
+          VERSION="2.2.3-${SHORT_HASH}"
+          echo "commit_count=${COMMIT_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "short_hash=${SHORT_HASH}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}, Commit: ${COMMIT_COUNT}, Hash: ${SHORT_HASH}"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing key
+        run: |
+          mkdir -p app
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/key.jks
+          ls -la app/key.jks
+
+      - name: Create signing config
+        run: |
+          cat > signing.properties << 'EOF'
+          ${{ secrets.SIGNING_CONFIG }}
+          EOF
+          echo "Signing config created successfully"
+
+      - name: Build release APK (github flavor only, no tracking)
+        run: ./gradlew assembleGithubRelease --stacktrace
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/Virtual-Hosts-main/app/key.jks
+          SIGNING_PROPERTIES: ${{ github.workspace }}/Virtual-Hosts-main/signing.properties
+
+      - name: List output files
+        run: |
+          echo "=== Generated APK files ==="
+          find app/build/outputs/apk -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+          echo ""
+          echo "=== APK Details ==="
+          find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "No APK files to list"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: VirtualHosts-v${{ steps.git_info.outputs.version }}-github-release-arm64-v8a
+          path: Virtual-Hosts-main/app/build/outputs/apk/github/release/*.apk
+          if-no-files-found: warn
+
+      - name: Upload APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Virtual-Hosts-main/app/build/outputs/apk/github/release/*.apk
+          name: Release ${{ github.ref_name }} (No Tracking)
+          body: |
+            ## VirtualHosts ${{ github.ref_name }} (隐私友好版)
+
+            **此版本已移除所有追踪库和应用商店风险检测代码：**
+            
+            | 组件 | 状态 |
+            |------|------|
+            | Google Firebase Analytics | ❌ 已移除 |
+            | Google Play Services | ❌ 已移除 |
+            | Google Play Billing | ❌ 已移除 |
+            | 百度统计 (BaiduMob) | ❌ 已移除 |
+
+            **构建信息：**
+            - Version: ${{ steps.git_info.outputs.version }}
+            - Version Code: ${{ steps.git_info.outputs.commit_count }}
+            - Commit: ${{ steps.git_info.outputs.short_hash }}
+            - Flavor: github (仅 Release 渠道)
+            - ABI: arm64-v8a
+
+            **支持的支付方式：**
+            - ✅ PayPal
+            - ✅ Bitcoin
+            - ✅ Alipay (支付宝)
+            - ✅ WeChat Pay (微信)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
